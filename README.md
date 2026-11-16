@@ -1,4 +1,176 @@
-# 항공기 예약 시스템 데이터베이스 설계
+# 항공기 예약 시스템
 
-승객이 항공편을 조회하고 좌석을 예약·발권하며, 결제와 마일리지까지
-관리하는 시스템의 데이터베이스 설계 프로젝트입니다.
+2026-2학기 데이터베이스설계 · 7분반 6팀
+
+PostgreSQL 15개 테이블 위에 Streamlit으로 화면 6개를 올린 프로젝트입니다.
+ORM 없이 SQL을 직접 실행하므로, 작성한 DDL과 쿼리가 그대로 돌아갑니다.
+
+---
+
+## 1. 로컬에서 실행
+
+```bash
+pip install -r requirements.txt
+```
+
+**DB 준비** — PostgreSQL에 `airline_db` 를 만들고 두 파일을 순서대로 실행합니다.
+
+```bash
+createdb airline_db
+psql -d airline_db -f sql/schema.sql    # 테이블 15개
+psql -d airline_db -f sql/seed.sql      # 샘플 데이터
+```
+
+`schema.sql` 맨 위에 `DROP TABLE` 이 있어 몇 번을 돌려도 깨끗하게 다시 만들어집니다.
+
+**접속 정보** — `.streamlit/secrets.toml.example` 을 복사해 본인 값으로 바꿉니다.
+
+```bash
+cp .streamlit/secrets.toml.example .streamlit/secrets.toml
+```
+
+**실행**
+
+```bash
+streamlit run app.py
+```
+
+데모 계정은 셋입니다. 비밀번호는 모두 `1234` 입니다.
+
+| 이메일 | 이름 | 마일리지 |
+|---|---|---|
+| kim@hansung.ac.kr | 김한성 | 8,080 |
+| lee@example.com | 이해인 | 1,200 |
+| park@example.com | 박서준 | 42,500 |
+
+---
+
+## 2. 팀원과 함께 쓰기
+
+**공용 DB 서버를 두지 않습니다.** 각자 로컬에 PostgreSQL을 깔고,
+`sql/` 폴더의 두 파일을 Git으로 공유합니다.
+
+제약조건을 테스트하려면 일부러 잘못된 데이터를 넣어봐야 하는데,
+공용 서버면 남의 작업을 망칩니다.
+
+**지켜야 할 세 가지**
+
+1. **DB를 직접 고치지 않습니다.** pgAdmin에서 컬럼을 추가하고 끝내면 남들은 모릅니다.
+   반드시 `sql/schema.sql` 을 고치고 커밋하세요.
+2. **스키마를 바꾸면 팀에 알립니다.** "schema.sql 다시 돌리세요" 한 줄이면 됩니다.
+3. **`secrets.toml` 은 커밋하지 않습니다.** 비밀번호가 들어갑니다. `.gitignore` 에 이미 있습니다.
+
+---
+
+## 3. Streamlit Community Cloud 배포
+
+팀원과 교수님이 링크로 바로 볼 수 있게 올리는 방법입니다.
+로컬 PostgreSQL은 인터넷에서 접속할 수 없으므로 **클라우드 DB가 따로 필요합니다.**
+
+### 3-1. 클라우드 DB 만들기 (Neon, 무료)
+
+1. <https://neon.tech> 가입 (GitHub 계정으로 가능)
+2. 프로젝트 생성 → 리전은 **Singapore** 가 한국에서 가장 가깝습니다
+3. 대시보드의 **Connection string** 에서 host · database · user · password 를 복사
+4. 로컬에서 스키마와 데이터를 밀어넣습니다
+
+```bash
+psql "postgresql://<user>:<password>@<host>/<dbname>?sslmode=require" -f sql/schema.sql
+psql "postgresql://<user>:<password>@<host>/<dbname>?sslmode=require" -f sql/seed.sql
+```
+
+### 3-2. GitHub에 올리기
+
+```bash
+git init
+git add .
+git commit -m "Streamlit 초안"
+git branch -M main
+git remote add origin https://github.com/<계정>/<저장소>.git
+git push -u origin main
+```
+
+`secrets.toml` 이 올라가지 않았는지 확인하세요.
+
+```bash
+git ls-files | grep secrets      # secrets.toml.example 만 나와야 정상
+```
+
+### 3-3. 배포
+
+1. <https://share.streamlit.io> 에 GitHub 계정으로 로그인
+2. **New app** → 저장소 · 브랜치(`main`) · 메인 파일(`app.py`) 선택
+   - 저장소가 Private 이어도 됩니다. 로그인할 때 접근 권한을 주면 보입니다.
+3. **Advanced settings → Secrets** 에 아래를 붙여넣습니다
+
+```toml
+[postgres]
+host     = "ep-xxxx-xxxx.ap-southeast-1.aws.neon.tech"
+port     = 5432
+dbname   = "airline_db"
+user     = "neondb_owner"
+password = "..."
+sslmode  = "require"
+```
+
+4. **Deploy** 를 누르면 몇 분 뒤 `https://<앱이름>.streamlit.app` 이 생깁니다.
+
+이후 `main` 에 푸시하면 자동으로 다시 배포됩니다.
+
+> 무료 플랜은 한동안 접속이 없으면 앱이 잠듭니다.
+> 다시 열면 30초쯤 뒤에 깨어나므로, 발표 직전에 미리 한 번 열어두세요.
+
+---
+
+## 4. 구조
+
+```
+app.py                    홈 · 연결 확인
+db.py                     DB 연결, 로그인, 트랜잭션 헬퍼
+pages/
+  1_항공편_검색.py          운임 등급별 가격 · 잔여석
+  2_예약하기.py             탑승객 · 좌석 · 결제   (트랜잭션)
+  3_예약_조회.py            예약번호/계정 조회 · 구간 단위 취소
+  4_체크인.py               체크인 · 탑승 · 마일리지 적립
+  5_마일리지.py             잔액 · 이력 · 소멸 예정
+  6_관리자.py               운항 상태 · 통계 · 제약조건 검증
+sql/
+  schema.sql              DDL · 제약조건 · 인덱스
+  seed.sql                샘플 데이터 (운항 410편, 운임 1,640건)
+```
+
+**페이지가 파일 하나씩이라 동시에 작업해도 Git 충돌이 나지 않습니다.**
+공용은 `db.py` 와 `app.py` 뿐입니다.
+
+| 담당 | 파일 |
+|---|---|
+| 정래원 | `db.py` `app.py` `1_항공편_검색.py` `2_예약하기.py` `6_관리자.py` |
+| 이해인 | `3_예약_조회.py` `4_체크인.py` `5_마일리지.py` |
+
+---
+
+## 5. 로그인과 회원 · 비회원
+
+로그인은 **별도 화면이 아니라 사이드바**에 있습니다. 화면 수는 6개 그대로입니다.
+
+로그인 여부가 회원 예약과 비회원 예약을 가릅니다.
+
+| 화면 | 회원 | 비회원 |
+|---|---|---|
+| 항공편 검색 | 동일 | 동일 (로그인 불필요) |
+| 예약하기 | 예약자 자동 지정 | `BOOKING.member_id` 가 NULL |
+| 예약 조회 | 계정으로 내 예약 전부 | 예약번호 + 탑승객 영문 성 |
+| 마일리지 | 잔액 · 이력 | 접근 불가 (계좌가 없음) |
+
+비밀번호는 `pbkdf2_sha256` 으로 해시해 저장하며 평문은 남기지 않습니다.
+
+---
+
+## 6. 아직 안 한 것
+
+- **예약하기가 편도 1구간만 만듭니다.** 왕복·경유는 `BOOKING_SEGMENT` 에 행을
+  여러 개 넣도록 확장해야 합니다. 구조는 이미 준비되어 있습니다.
+- 회원 가입 화면이 없습니다. 회원은 `seed.sql` 로만 들어갑니다.
+- 지연 시각을 저장할 컬럼이 없습니다. `flight_status` 로 지연 여부만 관리합니다.
+- 좌석이 그 운항편의 기종에 속하는지는 외래키로 보장되지 않아,
+  애플리케이션에서 검증합니다.
