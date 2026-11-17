@@ -38,10 +38,7 @@ with tab_pnr:
 with tab_member:
     if not me:
         st.info("회원 계정으로 조회하려면 왼쪽 사이드바에서 로그인하세요.")
-        st.caption(
-            "비회원 예약은 `BOOKING.member_id` 가 NULL이라 계정으로 찾을 수 없습니다. "
-            "예약번호 탭을 이용하세요."
-        )
+        st.caption("비회원 예약은 예약번호 탭에서 조회하세요.")
         mine = None
     else:
         st.caption(f"{me['member_name']} 님의 예약 내역")
@@ -213,7 +210,4 @@ done = db.q1(
        WHERE booking_id = %s AND payment_status = 'COMPLETED'""",
     (booking_id,),
 )
-if done == head.total_price:
-    st.caption(f"완료 결제 합계 {db.won(done)} = 예약 총액 {db.won(head.total_price)} · 일치")
-else:
-    st.caption(f"완료 결제 합계 {db.won(done)} / 예약 총액 {db.won(head.total_price)}")
+st.caption(f"결제 합계 {db.won(done)}")

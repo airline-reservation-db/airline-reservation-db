@@ -44,12 +44,6 @@ expiring = db.q1(
          AND expire_at <= CURRENT_DATE + INTERVAL '1 year'""",
     (mileage_id,),
 )
-sum_remaining = db.q1(
-    """SELECT COALESCE(SUM(remaining_amount), 0) FROM mileage_history
-       WHERE mileage_id = %s AND change_type = 'EARN'""",
-    (mileage_id,),
-)
-
 c = st.columns(4)
 c[0].metric("보유 마일리지", f"{int(acc.current_balance):,}")
 c[1].metric("누적 적립", f"{int(lifetime):,}")
@@ -58,18 +52,6 @@ c[3].metric("1년 내 소멸 예정", f"{int(expiring):,}", delta=None)
 
 if expiring > 0:
     st.warning(f"1년 이내에 **{int(expiring):,} 마일**이 소멸될 예정입니다.")
-
-# 정합성 ------------------------------------------------------------------
-if int(sum_remaining) == int(acc.current_balance):
-    st.caption(
-        f"적립 건 잔여량 합계 {int(sum_remaining):,} = 계좌 잔액 "
-        f"{int(acc.current_balance):,} · 일치"
-    )
-else:
-    st.error(
-        f"잔여량 합계 {int(sum_remaining):,} ≠ 계좌 잔액 {int(acc.current_balance):,} — "
-        "트랜잭션이 중간에 끊겼을 때 생기는 불일치입니다."
-    )
 
 st.divider()
 
