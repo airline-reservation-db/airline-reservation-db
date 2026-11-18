@@ -183,6 +183,7 @@ def login(email: str, password: str):
     r = row.iloc[0]
     if not verify_password(password, r.password):
         return False
+    st.session_state.pop("admin", None)
     st.session_state["member"] = {
         "member_id": int(r.member_id),
         "member_name": r.member_name,
@@ -192,8 +193,8 @@ def login(email: str, password: str):
 
 
 def logout():
-    for k in ("member", "picked", "view_booking"):
-        st.session_state.pop(k, None)
+    for k in list(st.session_state.keys()):
+        del st.session_state[k]
 
 
 def current_member():
@@ -201,44 +202,69 @@ def current_member():
     return st.session_state.get("member")
 
 
-def sidebar_auth():
-    """
-    사이드바 로그인 영역. 모든 페이지 맨 위에서 호출한다.
-
-    화면을 하나 더 만들지 않고 로그인을 붙이기 위한 구조다.
-    로그인 여부가 곧 회원 예약과 비회원 예약을 가른다.
-    """
-    with st.sidebar:
-        st.divider()
-        m = current_member()
-        if m:
-            st.markdown(f"**{m['member_name']}** 님")
-            st.caption(m["email"])
-            if st.button("로그아웃", use_container_width=True):
-                logout()
-                st.rerun()
-        else:
-            st.markdown("**로그인**")
-            with st.form("login_form", clear_on_submit=False):
-                email = st.text_input("이메일", placeholder="kim@hansung.ac.kr")
-                pw = st.text_input("비밀번호", type="password")
-                ok = st.form_submit_button("로그인", use_container_width=True)
-            if ok:
-                if login(email, pw):
-                    st.rerun()
-                else:
-                    st.error("이메일 또는 비밀번호가 맞지 않습니다.")
-            st.caption("로그인하지 않아도 검색과 비회원 예약은 가능합니다.")
-    return current_member()
-
-
-def require_login(message: str = "이 기능은 로그인이 필요합니다."):
+def require_login(message: str = "로그인이 필요한 화면입니다."):
     """로그인이 반드시 필요한 화면에서 호출한다."""
     m = current_member()
     if not m:
-        st.info(message + " 왼쪽 사이드바에서 로그인하세요.")
+        st.info(message)
+        if st.button("로그인하러 가기", type="primary"):
+            st.switch_page("views/login.py")
         st.stop()
     return m
+
+
+def email_taken(email: str) -> bool:
+    return q1("SELECT count(*) FROM member WHERE lower(email) = lower(%s)", (email.strip(),)) > 0
+
+
+def signup(name: str, email: str, phone: str, password: str) -> int:
+    """
+    회원과 마일리지 계좌를 한 트랜잭션으로 만든다.
+    계좌는 회원당 1개(mileage_account.member_id UNIQUE)라 가입 시점에 함께 연다.
+    """
+    with tx() as cur:
+        cur.execute(
+            """INSERT INTO member (email, password, member_name, phone)
+               VALUES (%s, %s, %s, NULLIF(%s, ''))
+               RETURNING member_id""",
+            (email.strip(), hash_password(password), name.strip(), phone.strip()),
+        )
+        member_id = cur.fetchone()[0]
+        cur.execute("INSERT INTO mileage_account (member_id) VALUES (%s)", (member_id,))
+    st.session_state["member"] = {
+        "member_id": member_id, "member_name": name.strip(), "email": email.strip(),
+    }
+    return member_id
+
+
+# ---------------------------------------------------------------- 관리자
+
+def admin_configured() -> bool:
+    try:
+        return bool(st.secrets["admin"]["username"] and st.secrets["admin"]["password"])
+    except Exception:
+        return False
+
+
+def admin_login(username: str, password: str) -> bool:
+    """
+    관리자 계정은 DB가 아니라 secrets 의 [admin] 에 둔다.
+    스키마에 관리자 구분이 없어서, 데모용으로 한 계정만 허용한다.
+    """
+    if not admin_configured():
+        return False
+    a = st.secrets["admin"]
+    ok_user = hmac.compare_digest(username.strip(), str(a["username"]))
+    ok_pw = hmac.compare_digest(password, str(a["password"]))
+    if ok_user and ok_pw:
+        st.session_state.pop("member", None)
+        st.session_state["admin"] = str(a["username"])
+        return True
+    return False
+
+
+def current_admin():
+    return st.session_state.get("admin")
 
 
 # ---------------------------------------------------------------- 공통 조회

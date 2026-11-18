@@ -125,27 +125,39 @@ sslmode  = "require"
 ## 4. 구조
 
 ```
-app.py                    홈 · 연결 확인
-db.py                     DB 연결, 로그인, 트랜잭션 헬퍼
-pages/
-  1_항공편_검색.py          운임 등급별 가격 · 잔여석
-  2_예약하기.py             탑승객 · 좌석 · 결제   (트랜잭션)
-  3_예약_조회.py            예약번호/계정 조회 · 구간 단위 취소
-  4_체크인.py               체크인 · 탑승 · 마일리지 적립
-  5_마일리지.py             잔액 · 이력 · 소멸 예정
-  6_관리자.py               운항 상태 · 통계 · 제약조건 검증
+app.py                    진입점 · 로그인 상태별 메뉴 (고객: 상단 / 관리자: 사이드바)
+db.py                     DB 연결, 로그인·회원가입, 관리자 로그인, 트랜잭션 헬퍼
+services.py               여러 테이블을 함께 바꾸는 업무 처리 (예약 · 취소 · 체크인 · 운항 완료 · 소멸)
+booking_view.py           예약 상세 화면 조각 (고객 예약 조회 · 관리자 예약 관리 공용)
+ui.py                     스타일 · 한글 라벨 · 카드/배지/좌석 배치도 조각
+views/
+  search.py               항공편 검색 → 결과 → 좌석 선택 → 예약 정보·결제 → 완료
+  lookup.py               예약번호 + 영문 성 조회 · 구간 단위 취소
+  checkin.py              온라인 체크인 3단계 · 탑승권
+  mileage.py              잔액 · 등급 · 적립/사용 내역        (회원)
+  mypage.py               회원 정보 · 내 예약 목록           (회원)
+  login.py · signup.py    로그인(회원/관리자) · 회원가입
+  admin/
+    dashboard.py          예약 수 · 매출 · 탑승률 · 등급 분포
+    flights.py            편명(flight) 등록 · 수정 · 삭제
+    schedules.py          날짜별 운항 · 상태/탑승구 · 탑승 처리 · 운항 완료(마일리지 적립)
+    aircraft.py           기종 · 좌석 배치도 · 항공기 등록
+    bookings.py           예약 검색 · 상세 · 취소
+    members.py            회원 목록 · 등급 변경 · 만료 마일리지 소멸
 sql/
   schema.sql              DDL · 제약조건 · 인덱스
   seed.sql                샘플 데이터 (운항 410편, 운임 1,640건)
 ```
 
-**페이지가 파일 하나씩이라 동시에 작업해도 Git 충돌이 나지 않습니다.**
-공용은 `db.py` 와 `app.py` 뿐입니다.
+**관리자 계정**은 DB가 아니라 `secrets.toml` 의 `[admin]` 에서 읽습니다
+(`secrets.toml.example` 참고). Streamlit Cloud 에서는 Settings → Secrets 에 같은 내용을 넣습니다.
 
 | 담당 | 파일 |
 |---|---|
-| 정래원 | `db.py` `app.py` `1_항공편_검색.py` `2_예약하기.py` `6_관리자.py` |
-| 이해인 | `3_예약_조회.py` `4_체크인.py` `5_마일리지.py` |
+| 정래원 | `db.py` `app.py` `views/search.py` `views/admin/*` |
+| 이해인 | `views/lookup.py` `views/checkin.py` `views/mileage.py` |
+
+새로 생긴 `services.py` `booking_view.py` `ui.py` `views/mypage.py` `views/login.py` `views/signup.py` 는 담당을 정해야 합니다.
 
 ---
 

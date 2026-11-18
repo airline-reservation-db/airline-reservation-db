@@ -1,5 +1,15 @@
 [theme]
 base = "light"
+primaryColor = "#0B5FFF"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F5F7"
+textColor = "#111418"
+borderColor = "#DADDE3"
+showWidgetBorder = true
+baseRadius = "8px"
+
+[client]
+toolbarMode = "minimal"
 
 [browser]
 gatherUsageStats = false
