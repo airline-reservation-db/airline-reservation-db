@@ -145,7 +145,10 @@ df = db.q(
               fs.terminal, fs.gate, ac.model_name,
               r.dep_airport_code || ' → ' || r.arr_airport_code AS route,
               f.std_dep_time, f.std_arr_time,
-              (SELECT COALESCE(SUM(seats_allotted - seats_sold), 0) FROM fare WHERE schedule_id = fs.schedule_id) AS seats_left,
+              -- 실제 빈 좌석 수 (운임 할당이 좌석 수보다 많게 잡힌 기종이 있어 좌석 기준으로 센다)
+              (SELECT count(*) FROM seat s WHERE s.aircraft_id = fs.aircraft_id)
+                - (SELECT count(*) FROM booking_segment bs JOIN seat_assignment sa ON sa.segment_id = bs.segment_id
+                    WHERE bs.schedule_id = fs.schedule_id AND bs.segment_status <> 'CANCELLED') AS seats_left,
               (SELECT count(*) FROM booking_segment bs WHERE bs.schedule_id = fs.schedule_id) AS booked,
               (SELECT count(*) FROM booking_segment bs JOIN seat_assignment sa ON sa.segment_id = bs.segment_id
                 WHERE bs.schedule_id = fs.schedule_id AND bs.segment_status <> 'CANCELLED') AS pax

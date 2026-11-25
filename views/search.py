@@ -66,7 +66,16 @@ SELECT fs.schedule_id, fs.aircraft_id, fs.flight_date, fs.flight_status, fs.term
        r.dep_airport_code, r.arr_airport_code, r.distance_km, r.flight_duration,
        ac.model_name,
        fa.fare_id, fa.seat_class, fa.fare_code, fa.base_price, fa.cancellation_fee,
-       fa.mileage_rate, fa.seats_allotted - fa.seats_sold AS seats_left
+       fa.mileage_rate,
+       -- 남은 자리 = 운임 잔여석과 실제 빈 좌석(같은 등급) 중 작은 값
+       LEAST(fa.seats_allotted - fa.seats_sold,
+             (SELECT count(*) FROM seat s
+               WHERE s.aircraft_id = fs.aircraft_id AND s.seat_class = fa.seat_class)
+           - (SELECT count(*) FROM seat_assignment sa
+               JOIN booking_segment bs ON sa.segment_id = bs.segment_id
+               JOIN seat s ON sa.seat_id = s.seat_id
+               WHERE bs.schedule_id = fs.schedule_id AND bs.segment_status <> 'CANCELLED'
+                 AND s.seat_class = fa.seat_class)) AS seats_left
 FROM flight_schedule fs
 JOIN flight   f  ON fs.flight_number = f.flight_number
 JOIN route    r  ON f.route_id       = r.route_id
