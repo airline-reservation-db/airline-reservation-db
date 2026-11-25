@@ -118,8 +118,10 @@ def q(sql: str, params=None) -> pd.DataFrame:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, params or ())
             rows = cur.fetchall()
+            cols = [d[0] for d in cur.description] if cur.description else []
         conn.commit()
-        return pd.DataFrame(rows)
+        # 결과가 0행이어도 컬럼은 남겨 둔다 (빈 결과에 groupby·필터를 걸어도 깨지지 않게)
+        return pd.DataFrame(rows, columns=cols)
 
 
 def q1(sql: str, params=None):
