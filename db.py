@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import os
 import secrets as pysecrets
+import time
 from contextlib import contextmanager
 
 import pandas as pd
@@ -51,9 +52,29 @@ def _pool() -> psycopg2.pool.ThreadedConnectionPool:
     이제는 요청마다 풀에서 연결을 빌려 쓰고 돌려준다.
     """
     cfg = _config()
+    # TCP keepalive: 클라우드 DB나 중간 장비가 조용히 끊은 연결을 빨리 알아챈다
+    alive = {"keepalives": 1, "keepalives_idle": 30, "keepalives_interval": 10, "keepalives_count": 3}
     if "dsn" in cfg:
-        return psycopg2.pool.ThreadedConnectionPool(1, 10, cfg["dsn"])
-    return psycopg2.pool.ThreadedConnectionPool(1, 10, **cfg)
+        return psycopg2.pool.ThreadedConnectionPool(1, 10, cfg["dsn"], **alive)
+    return psycopg2.pool.ThreadedConnectionPool(1, 10, **cfg, **alive)
+
+
+_last_used: dict[int, float] = {}   # id(conn) -> 마지막 반납 시각
+IDLE_CHECK = 60                      # 이만큼(초) 쉰 연결은 쓰기 전에 살아있는지 확인
+
+
+def _alive(conn) -> bool:
+    if conn.closed:
+        return False
+    if time.monotonic() - _last_used.get(id(conn), 0) < IDLE_CHECK:
+        return True
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+        conn.rollback()
+        return True
+    except psycopg2.Error:
+        return False
 
 
 @contextmanager
@@ -64,11 +85,14 @@ def get_conn():
         with get_conn() as conn:
             ...
 
-    클라우드 DB는 오래 쉰 연결을 끊기도 하므로, 끊긴 연결은 버리고 새로 받는다.
+    클라우드 DB(Neon)는 오래 쉰 연결을 끊으므로, 끊긴 연결은 버리고 새로 받는다.
     """
     pool = _pool()
     conn = pool.getconn()
-    if conn.closed:
+    for _ in range(10):
+        if _alive(conn):
+            break
+        _last_used.pop(id(conn), None)
         pool.putconn(conn, close=True)
         conn = pool.getconn()
     conn.autocommit = False
@@ -81,6 +105,10 @@ def get_conn():
                 conn.rollback()  # 커밋 안 된 작업이 남아 있으면 다음 사용자에게 넘기지 않는다
             except psycopg2.Error:
                 broken = True
+        if broken:
+            _last_used.pop(id(conn), None)
+        else:
+            _last_used[id(conn)] = time.monotonic()
         pool.putconn(conn, close=broken)
 
 

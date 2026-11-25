@@ -19,7 +19,11 @@ pip install -r requirements.txt
 createdb airline_db
 psql -d airline_db -f sql/schema.sql    # 테이블 15개
 psql -d airline_db -f sql/seed.sql      # 샘플 데이터
+python sql/seed_demo.py                 # (선택) 데모 예약·좌석 배정 약 2만 건
 ```
+
+`seed_demo.py` 는 `.streamlit/secrets.toml` 의 DB에 회원 12명과 예약·탑승객·좌석 배정·결제·마일리지 이력을 만들고,
+`fare.seats_sold` 를 실제 좌석 배정 수에 맞춰 다시 계산합니다. 예약이 이미 있으면 실행하지 않습니다.
 
 `schema.sql` 맨 위에 `DROP TABLE` 이 있어 몇 번을 돌려도 깨끗하게 다시 만들어집니다.
 
@@ -77,6 +81,7 @@ streamlit run app.py
 ```bash
 psql "postgresql://<user>:<password>@<host>/<dbname>?sslmode=require" -f sql/schema.sql
 psql "postgresql://<user>:<password>@<host>/<dbname>?sslmode=require" -f sql/seed.sql
+python sql/seed_demo.py --dsn "postgresql://<user>:<password>@<host>/<dbname>?sslmode=require"
 ```
 
 ### 3-2. GitHub에 올리기
@@ -147,6 +152,7 @@ views/
 sql/
   schema.sql              DDL · 제약조건 · 인덱스
   seed.sql                샘플 데이터 (운항 410편, 운임 1,640건)
+  seed_demo.py            데모 예약 데이터 생성 (선택)
 ```
 
 **관리자 계정**은 DB가 아니라 `secrets.toml` 의 `[admin]` 에서 읽습니다
@@ -180,9 +186,10 @@ sql/
 
 ## 6. 아직 안 한 것
 
-- **예약하기가 편도 1구간만 만듭니다.** 왕복·경유는 `BOOKING_SEGMENT` 에 행을
-  여러 개 넣도록 확장해야 합니다. 구조는 이미 준비되어 있습니다.
-- 회원 가입 화면이 없습니다. 회원은 `seed.sql` 로만 들어갑니다.
+- 경유(환승) 예약은 아직 없습니다. 편도·왕복만 지원합니다.
+- `seed.sql` 에서 B737-800(비즈니스석 0석, 이코노미석 150석)에도 비즈니스 운임(C) 8석과
+  이코노미 운임 합계 180석이 잡혀 있습니다. 실제 좌석 수와 맞지 않아 `seed_demo.py` 는
+  B737 비즈니스석을 팔지 않습니다.
 - 지연 시각을 저장할 컬럼이 없습니다. `flight_status` 로 지연 여부만 관리합니다.
 - 좌석이 그 운항편의 기종에 속하는지는 외래키로 보장되지 않아,
   애플리케이션에서 검증합니다.
